@@ -39,7 +39,6 @@ class CommonPlatform ():
         "Silicon/Arm/Mu_Tiano",
         "Silicon/Qualcomm",
         "Silicon/Silicium",
-        "Silicium-ACPI/Platforms/EEBBK",
         "Silicium-ACPI/SoCs/Qualcomm"
     )
 
