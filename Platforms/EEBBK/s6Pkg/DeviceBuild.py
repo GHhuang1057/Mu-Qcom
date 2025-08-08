@@ -6,8 +6,7 @@
 import datetime
 import logging
 import os
-import uuid
-import sys  # 新增导入
+import sys  # 确保已导入sys
 
 from io import StringIO
 from pathlib import Path
@@ -65,14 +64,15 @@ class SettingsManager (UpdateSettingsManager, SetupSettingsManager, PrEvalSettin
 
     def GetRequiredSubmodules (self):
         required = [
-            RequiredSubmodule ("Binaries", True, recursive=False),
-            RequiredSubmodule ("Common/Mu", True),
-            RequiredSubmodule ("Common/Mu_OEM_Sample", True),
-            RequiredSubmodule ("Common/Mu_Tiano_Plus", True),
-            RequiredSubmodule ("Features/DFCI", True),
-            RequiredSubmodule ("Mu_Basecore", True),
-            RequiredSubmodule ("Silicon/Arm/Mu_Tiano", True),
-            RequiredSubmodule ("Silicium-ACPI", True),
+            # 修复参数传递方式 - 使用关键字参数
+            RequiredSubmodule("Binaries", optional=True, recursive=False),
+            RequiredSubmodule("Common/Mu", optional=True),
+            RequiredSubmodule("Common/Mu_OEM_Sample", optional=True),
+            RequiredSubmodule("Common/Mu_Tiano_Plus", optional=True),
+            RequiredSubmodule("Features/DFCI", optional=True),
+            RequiredSubmodule("Mu_Basecore", optional=True),
+            RequiredSubmodule("Silicon/Arm/Mu_Tiano", optional=True),
+            RequiredSubmodule("Silicium-ACPI", optional=True),
         ]
         
         # 添加子模块路径验证
@@ -124,7 +124,8 @@ class SettingsManager (UpdateSettingsManager, SetupSettingsManager, PrEvalSettin
         if not os.path.isfile(dsc_path):
             logging.error(f"DSC file not found at: {dsc_path}")
             logging.error(f"Current directory: {os.getcwd()}")
-            logging.error(f"Directory contents: {os.listdir(os.path.dirname(dsc_path))}")
+            if os.path.exists(os.path.dirname(dsc_path)):
+                logging.error(f"Directory contents: {os.listdir(os.path.dirname(dsc_path))}")
             raise FileNotFoundError(f"DSC file missing: {dsc_path}")
         return (CommonPlatform.DscPath, {})
 
@@ -177,7 +178,8 @@ class PlatformBuilder (UefiBuilder, BuildSettingsManager):
         if not os.path.isfile(dsc_path):
             logging.critical(f"DSC file not found: {dsc_path}")
             logging.critical(f"Current directory: {os.getcwd()}")
-            logging.critical(f"Workspace contents: {os.listdir(workspace)}")
+            if os.path.exists(workspace):
+                logging.critical(f"Workspace contents: {os.listdir(workspace)}")
             if os.path.exists(os.path.join(workspace, "s6Pkg")):
                 logging.critical(f"s6Pkg contents: {os.listdir(os.path.join(workspace, 's6Pkg'))}")
             raise FileNotFoundError("Critical DSC file missing")
@@ -219,7 +221,7 @@ if __name__ == "__main__":
     # 配置详细日志
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[logging.StreamHandler(sys.stdout)]
     )
 
