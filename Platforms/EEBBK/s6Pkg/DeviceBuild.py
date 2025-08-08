@@ -28,7 +28,7 @@ class CommonPlatform ():
     ArchSupported = ("AARCH64")
     TargetsSupported = ("DEBUG", "RELEASE")
     Scopes = ('s6', 'gcc_aarch64_linux', 'edk2-build')
-    WorkspaceRoot = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    WorkspaceRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     PackagesPath = (
         "Platforms/Lenovo",
         "Common/Mu",
@@ -41,6 +41,7 @@ class CommonPlatform ():
         "Silicon/Silicium",
         "Silicium-ACPI/SoCs/Qualcomm"
     )
+    DscPath = "s6Pkg/s6.dsc"
 
 # ####################################################################################### #
 #                         Configuration for Update & Setup                                #
@@ -101,7 +102,12 @@ class SettingsManager (UpdateSettingsManager, SetupSettingsManager, PrEvalSettin
         return build_these_packages
 
     def GetPlatformDscAndConfig (self) -> tuple:
-        return ("s6Pkg/s6.dsc", {})
+        # 使用绝对路径确保可靠解析
+        dsc_path = os.path.join(CommonPlatform.WorkspaceRoot, CommonPlatform.DscPath)
+        if not os.path.isfile(dsc_path):
+            logging.error(f"DSC file not found at: {dsc_path}")
+            raise FileNotFoundError(f"DSC file missing: {dsc_path}")
+        return (CommonPlatform.DscPath, {})
 
     def GetName (self):
         return "s6"
@@ -162,6 +168,13 @@ class PlatformBuilder (UefiBuilder, BuildSettingsManager):
         self.env.SetValue ("BLD_*_FD_BASE", self.env.GetValue("FD_BASE"), "Default")
         self.env.SetValue ("BLD_*_FD_SIZE", self.env.GetValue("FD_SIZE"), "Default")
         self.env.SetValue ("BLD_*_FD_BLOCKS", self.env.GetValue("FD_BLOCKS"), "Default")
+        workspace = self.GetWorkspaceRoot()
+        dsc_path = os.path.join(workspace, "s6Pkg/s6.dsc")
+        if not os.path.isfile(dsc_path):
+            logging.critical(f"DSC file not found: {dsc_path}")
+            raise FileNotFoundError("Critical DSC file missing")
+        
+        return 0
 
         return 0
 
