@@ -1,0 +1,8 @@
+[Defines]
+  DEC_SPECIFICATION                   = 0x00010005
+  PACKAGE_NAME                        = s6
+  PACKAGE_GUID                        = 1CFE8663-37B5-A37E-9B73-5679E8316792
+  PACKAGE_VERSION                     = 0.1
+
+[Guids]
+  gs6TokenSpaceGuid                = { 0x203EA35A, 0xA44E, 0x030B, { 0xC2, 0x23, 0x8B, 0xFC, 0xAC, 0x6C, 0xD7, 0x93 } }
