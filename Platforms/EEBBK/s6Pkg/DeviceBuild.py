@@ -7,6 +7,7 @@ import datetime
 import logging
 import os
 import uuid
+import sys  # 新增导入
 
 from io import StringIO
 from pathlib import Path
@@ -28,7 +29,13 @@ class CommonPlatform ():
     ArchSupported = ("AARCH64")
     TargetsSupported = ("DEBUG", "RELEASE")
     Scopes = ('s6', 'gcc_aarch64_linux', 'edk2-build')
+    
+    # 修复工作空间路径计算
     WorkspaceRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # 添加 DSC 文件路径变量
+    DscPath = "s6Pkg/s6.dsc"
+    
     PackagesPath = (
         "Platforms/Lenovo",
         "Common/Mu",
@@ -41,7 +48,6 @@ class CommonPlatform ():
         "Silicon/Silicium",
         "Silicium-ACPI/SoCs/Qualcomm"
     )
-    DscPath = "s6Pkg/s6.dsc"
 
 # ####################################################################################### #
 #                         Configuration for Update & Setup                                #
@@ -58,8 +64,8 @@ class SettingsManager (UpdateSettingsManager, SetupSettingsManager, PrEvalSettin
         return CommonPlatform.TargetsSupported
 
     def GetRequiredSubmodules (self):
-        return [
-            RequiredSubmodule ("Binaries", True),
+        required = [
+            RequiredSubmodule ("Binaries", True, recursive=False),
             RequiredSubmodule ("Common/Mu", True),
             RequiredSubmodule ("Common/Mu_OEM_Sample", True),
             RequiredSubmodule ("Common/Mu_Tiano_Plus", True),
@@ -68,6 +74,17 @@ class SettingsManager (UpdateSettingsManager, SetupSettingsManager, PrEvalSettin
             RequiredSubmodule ("Silicon/Arm/Mu_Tiano", True),
             RequiredSubmodule ("Silicium-ACPI", True),
         ]
+        
+        # 添加子模块路径验证
+        workspace = self.GetWorkspaceRoot()
+        for submodule in required:
+            sub_path = os.path.join(workspace, submodule.path)
+            if not os.path.exists(sub_path):
+                logging.error(f"Submodule path missing: {sub_path}")
+            elif not os.path.exists(os.path.join(sub_path, ".git")):
+                logging.error(f"Submodule not initialized: {sub_path}")
+                
+        return required
 
     def SetArchitectures (self, list_of_requested_architectures):
         unsupported = set(list_of_requested_architectures) - set(self.GetArchitecturesSupported())
@@ -106,6 +123,8 @@ class SettingsManager (UpdateSettingsManager, SetupSettingsManager, PrEvalSettin
         dsc_path = os.path.join(CommonPlatform.WorkspaceRoot, CommonPlatform.DscPath)
         if not os.path.isfile(dsc_path):
             logging.error(f"DSC file not found at: {dsc_path}")
+            logging.error(f"Current directory: {os.getcwd()}")
+            logging.error(f"Directory contents: {os.listdir(os.path.dirname(dsc_path))}")
             raise FileNotFoundError(f"DSC file missing: {dsc_path}")
         return (CommonPlatform.DscPath, {})
 
@@ -148,13 +167,23 @@ class PlatformBuilder (UefiBuilder, BuildSettingsManager):
 
     def GetLoggingLevel (self, loggerType):
         return logging.INFO
-        return super().GetLoggingLevel(loggerType)
 
     def SetPlatformEnv (self):
         logging.debug ("PlatformBuilder SetPlatformEnv")
 
+        # 添加路径验证
+        workspace = self.GetWorkspaceRoot()
+        dsc_path = os.path.join(workspace, CommonPlatform.DscPath)
+        if not os.path.isfile(dsc_path):
+            logging.critical(f"DSC file not found: {dsc_path}")
+            logging.critical(f"Current directory: {os.getcwd()}")
+            logging.critical(f"Workspace contents: {os.listdir(workspace)}")
+            if os.path.exists(os.path.join(workspace, "s6Pkg")):
+                logging.critical(f"s6Pkg contents: {os.listdir(os.path.join(workspace, 's6Pkg'))}")
+            raise FileNotFoundError("Critical DSC file missing")
+        
         self.env.SetValue ("PRODUCT_NAME", "s6", "Platform Hardcoded")
-        self.env.SetValue ("ACTIVE_PLATFORM", "s6Pkg/s6.dsc", "Platform Hardcoded")
+        self.env.SetValue ("ACTIVE_PLATFORM", CommonPlatform.DscPath, "Platform Hardcoded")
         self.env.SetValue ("TARGET_ARCH", "AARCH64", "Platform Hardcoded")
         self.env.SetValue ("TOOL_CHAIN_TAG", "CLANGPDB", "set default to clangpdb")
         self.env.SetValue ("EMPTY_DRIVE", "FALSE", "Default to false")
@@ -168,13 +197,6 @@ class PlatformBuilder (UefiBuilder, BuildSettingsManager):
         self.env.SetValue ("BLD_*_FD_BASE", self.env.GetValue("FD_BASE"), "Default")
         self.env.SetValue ("BLD_*_FD_SIZE", self.env.GetValue("FD_SIZE"), "Default")
         self.env.SetValue ("BLD_*_FD_BLOCKS", self.env.GetValue("FD_BLOCKS"), "Default")
-        workspace = self.GetWorkspaceRoot()
-        dsc_path = os.path.join(workspace, "s6Pkg/s6.dsc")
-        if not os.path.isfile(dsc_path):
-            logging.critical(f"DSC file not found: {dsc_path}")
-            raise FileNotFoundError("Critical DSC file missing")
-        
-        return 0
 
         return 0
 
@@ -189,11 +211,17 @@ class PlatformBuilder (UefiBuilder, BuildSettingsManager):
 
 if __name__ == "__main__":
     import argparse
-    import sys
 
     from edk2toolext.invocables.edk2_platform_build import Edk2PlatformBuild
     from edk2toolext.invocables.edk2_setup import Edk2PlatformSetup
     from edk2toolext.invocables.edk2_update import Edk2Update
+
+    # 配置详细日志
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
 
     SCRIPT_PATH = os.path.relpath (__file__)
 
@@ -212,8 +240,20 @@ if __name__ == "__main__":
     sys.argv = new_args
 
     if args.setup:
-        Edk2PlatformSetup().Invoke()
+        try:
+            Edk2PlatformSetup().Invoke()
+        except Exception as e:
+            logging.exception("Setup failed with exception")
+            sys.exit(1)
     elif args.update:
-        Edk2Update().Invoke()
+        try:
+            Edk2Update().Invoke()
+        except Exception as e:
+            logging.exception("Update failed with exception")
+            sys.exit(1)
     else:
-        Edk2PlatformBuild().Invoke()
+        try:
+            Edk2PlatformBuild().Invoke()
+        except Exception as e:
+            logging.exception("Build failed with exception")
+            sys.exit(1)
